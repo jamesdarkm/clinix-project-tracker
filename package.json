@@ -1,0 +1,17 @@
+{
+  "name": "clinix-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Clinix x DarkMatter programme dashboard with shared saved state",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  }
+}
