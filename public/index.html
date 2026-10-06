@@ -83,6 +83,7 @@ input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 .search input{width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);font-size:13px}
 .btn{padding:8px 14px;border-radius:var(--r);font-size:12.5px;font-weight:600;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
 .btn:hover{border-color:var(--mute)}
+a.btn{text-decoration:none}
 .btn-p{background:var(--clinix);border-color:var(--clinix);color:#fff}
 .btn-p:hover{background:var(--clinix-dk);border-color:var(--clinix-dk)}
 .chips{max-width:1680px;margin:0 auto;padding:12px 24px 0;display:flex;gap:6px;flex-wrap:wrap}
@@ -183,6 +184,7 @@ select.pill{-webkit-appearance:none;appearance:none;border:none;cursor:pointer;p
     <div class="sync"><span class="dot" id="dot"></span><span id="syncTxt">Connecting</span></div>
     <button class="btn" id="btnResched">Reschedule</button>
     <button class="btn" id="btnReset">Reset board</button>
+    <!--LOGOUT-->
   </div>
 </div>
 
@@ -384,6 +386,7 @@ const Remote = {
   async load(){
     if (SERVER_ENDPOINT){
       const r = await fetch(SERVER_ENDPOINT, {headers:{'Accept':'application/json'}});
+      if (r.status === 401) { location.href = '/login'; throw new Error('signed out'); }
       if (r.status === 404) return null;
       if (!r.ok) throw new Error('GET ' + r.status);
       return await r.json();
@@ -395,6 +398,7 @@ const Remote = {
   async save(state){
     if (SERVER_ENDPOINT){
       const r = await fetch(SERVER_ENDPOINT, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(state)});
+      if (r.status === 401) { location.href = '/login'; throw new Error('signed out'); }
       if (!r.ok) throw new Error('PUT ' + r.status);
       return;
     }

@@ -5,7 +5,7 @@
 //   GET /healthz    -> 200 ok (no auth, for Railway)
 //
 // Storage: Postgres when DATABASE_URL is set, otherwise data/state.json.
-// Set DASHBOARD_PASSWORD to put the whole site behind a browser password prompt.
+// Set DASHBOARD_PASSWORD to put the whole site behind the /login page.
 
 import http from 'node:http';
 import crypto from 'node:crypto';
@@ -18,8 +18,13 @@ const PORT = Number(process.env.PORT) || 3000;
 const PASSWORD = process.env.DASHBOARD_PASSWORD || '';
 const KEY = 'clinix-darkmatter-board-v2';
 const MAX_BODY = 5 * 1024 * 1024;
+const SESSION_DAYS = 30;
 
-const PAGE = await readFile(path.join(ROOT, 'public', 'index.html'));
+const pub = f => readFile(path.join(ROOT, 'public', f));
+const PAGE = (await pub('index.html')).toString('utf8')
+  .replace('<!--LOGOUT-->', PASSWORD ? '<a class="btn" href="/logout">Log out</a>' : '');
+const LOGIN = (await pub('login.html')).toString('utf8');
+const LOGO = await pub('logo.png');
 
 /* ---------- storage ---------- */
 function fileStore(dir){
@@ -92,20 +97,58 @@ const valid = s => isObj(s) && isObj(s.items) && isObj(s.milestones) && isObj(s.
 let queue = Promise.resolve();
 const serial = fn => { const p = queue.then(fn); queue = p.catch(() => {}); return p; };
 
-/* ---------- http ---------- */
-function authorised(req){
-  if (!PASSWORD) return true;
-  const [scheme, value] = (req.headers.authorization || '').split(' ');
-  if (scheme !== 'Basic' || !value) return false;
-  const given = Buffer.from(value, 'base64').toString('utf8').split(':').slice(1).join(':');
-  const h = s => crypto.createHash('sha256').update(s).digest();
-  return crypto.timingSafeEqual(h(given), h(PASSWORD));
+/* ---------- login ----------
+   The session cookie is "<expiry>.<hmac>", signed with a key derived from the
+   password: it survives redeploys, and changing DASHBOARD_PASSWORD signs everyone out. */
+const COOKIE = 'clinix_session';
+const SIGN_KEY = crypto.createHash('sha256').update('clinix-session:' + PASSWORD).digest();
+const sign = v => crypto.createHmac('sha256', SIGN_KEY).update(v).digest('base64url');
+const sha = s => crypto.createHash('sha256').update(s).digest();
+
+function newSession(){
+  const exp = String(Date.now() + SESSION_DAYS * 864e5);
+  return exp + '.' + sign(exp);
+}
+function validSession(token){
+  const [exp, sig] = (token || '').split('.');
+  if (!exp || !sig || !(Number(exp) > Date.now())) return false;
+  const a = Buffer.from(sig), b = Buffer.from(sign(exp));
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+function getCookie(req, name){
+  for (const part of (req.headers.cookie || '').split(';')){
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === name) return part.slice(i + 1).trim();
+  }
+  return '';
+}
+const signedIn = req => !PASSWORD || validSession(getCookie(req, COOKIE));
+const sessionCookie = (req, value, maxAge) => `${COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}` +
+  (req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '');
+
+// Failed sign-ins: 10 per IP per 15 minutes. The last X-Forwarded-For entry is the
+// one Railway's proxy adds, so a client cannot dodge the limit by sending its own.
+const LIMIT = 10, WINDOW = 15 * 60e3, fails = new Map();
+const ipOf = req => (req.headers['x-forwarded-for'] || '').split(',').pop().trim() || req.socket.remoteAddress;
+const lockedOut = ip => { const f = fails.get(ip); return !!f && f.n >= LIMIT && f.until > Date.now(); };
+function noteFail(ip){
+  const f = fails.get(ip);
+  if (f && f.until > Date.now()) return void f.n++;
+  if (fails.size > 5000) for (const [k, v] of fails) if (v.until <= Date.now()) fails.delete(k);
+  fails.set(ip, {n: 1, until: Date.now() + WINDOW});
 }
 
-function send(res, code, body, type = 'application/json; charset=utf-8'){
-  res.writeHead(code, {'Content-Type': type, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow', 'X-Content-Type-Options': 'nosniff'});
+/* ---------- http ---------- */
+function send(res, code, body, type = 'application/json; charset=utf-8', headers = {}){
+  res.writeHead(code, {'Content-Type': type, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow', 'X-Content-Type-Options': 'nosniff', ...headers});
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
 }
+function redirect(res, to, headers = {}){
+  res.writeHead(303, {Location: to, 'Cache-Control': 'no-store', ...headers});
+  res.end();
+}
+const loginPage = (res, code, err) => send(res, code,
+  LOGIN.replace('<!--ERROR-->', err ? `<p class="err" role="alert">${err}</p>` : ''), 'text/html; charset=utf-8');
 
 function readBody(req){
   return new Promise((resolve, reject) => {
@@ -124,10 +167,26 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   try {
     if (url.pathname === '/healthz') return send(res, 200, 'ok', 'text/plain');
+    if (url.pathname === '/logo.png') return send(res, 200, LOGO, 'image/png', {'Cache-Control': 'public, max-age=86400'});
 
-    if (!authorised(req)){
-      res.writeHead(401, {'WWW-Authenticate': 'Basic realm="Clinix dashboard", charset="UTF-8"'});
-      return res.end('Password required');
+    if (url.pathname === '/login'){
+      if (!PASSWORD || (req.method === 'GET' && signedIn(req))) return redirect(res, '/');
+      if (req.method === 'GET') return loginPage(res, 200);
+      if (req.method !== 'POST') return send(res, 405, 'Method not allowed', 'text/plain', {Allow: 'GET, POST'});
+      const ip = ipOf(req);
+      if (lockedOut(ip)) return loginPage(res, 429, 'Too many attempts. Try again in 15 minutes.');
+      const given = new URLSearchParams(await readBody(req)).get('password') || '';
+      if (!crypto.timingSafeEqual(sha(given), sha(PASSWORD))){
+        noteFail(ip);
+        return loginPage(res, 401, 'That password is not right.');
+      }
+      fails.delete(ip);
+      return redirect(res, '/', {'Set-Cookie': sessionCookie(req, newSession(), SESSION_DAYS * 86400)});
+    }
+    if (url.pathname === '/logout') return redirect(res, PASSWORD ? '/login' : '/', {'Set-Cookie': sessionCookie(req, '', 0)});
+
+    if (!signedIn(req)){
+      return url.pathname.startsWith('/api/') ? send(res, 401, {error: 'signed out'}) : redirect(res, '/login');
     }
 
     if (url.pathname === '/api/state'){
@@ -163,7 +222,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Clinix dashboard on :${PORT}, storage: ${store.name}${PASSWORD ? ', password on' : ''}`);
+  console.log(`Clinix dashboard on :${PORT}, storage: ${store.name}, login ${PASSWORD ? 'on' : 'OFF (set DASHBOARD_PASSWORD)'}`);
   if (!process.env.DATABASE_URL && process.env.RAILWAY_ENVIRONMENT)
     console.warn('WARNING: no DATABASE_URL. State is in a local file and will be lost on redeploy unless DATA_DIR is on a volume.');
 });

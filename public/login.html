@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Sign in - Clinix Programme Dashboard</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --clinix:#E8491D; --clinix-dk:#C13A14; --clinix-tint:#FDEEE9;
+  --ink:#1C2530; --slate:#5C6B7A; --mute:#8A97A4;
+  --line:#E2E7EC; --canvas:#F5F7F9; --surface:#FFFFFF; --stop:#B3341F;
+  --sans:'Archivo','Helvetica Neue',Arial,sans-serif;
+  --r:8px; --sh:0 1px 2px rgba(28,37,48,.06),0 4px 12px rgba(28,37,48,.05);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--canvas);font-family:var(--sans);color:var(--ink);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh;display:grid;place-items:center;padding:24px 16px}
+:focus-visible{outline:2px solid var(--clinix);outline-offset:2px;border-radius:3px}
+.box{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--clinix);border-radius:var(--r);box-shadow:var(--sh);padding:28px 28px 26px}
+.logo{height:52px;width:auto;display:block;margin-bottom:20px}
+h1{margin:0;font-size:16px;font-weight:600;letter-spacing:-.01em}
+.sub{margin:2px 0 22px;font-size:12px;color:var(--mute)}
+label{display:block;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--mute);font-weight:600;margin-bottom:5px}
+input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font:inherit;color:inherit}
+input:focus{border-color:var(--clinix)}
+button{margin-top:16px;width:100%;padding:10px 14px;border-radius:var(--r);border:1px solid var(--clinix);background:var(--clinix);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+button:hover{background:var(--clinix-dk);border-color:var(--clinix-dk)}
+.err{margin:0 0 16px;padding:9px 12px;border-radius:6px;background:var(--clinix-tint);color:var(--stop);font-size:12.5px;font-weight:500}
+</style>
+
+<main class="box">
+  <img class="logo" src="/logo.png" alt="Clinix">
+  <h1>Website Development &amp; Maintenance</h1>
+  <p class="sub">Clinix Health Group &middot; DarkMatter programme dashboard</p>
+  <!--ERROR-->
+  <form method="post" action="/login">
+    <label for="pw">Password</label>
+    <input id="pw" name="password" type="password" autocomplete="current-password" required autofocus>
+    <button type="submit">Sign in</button>
+  </form>
+</main>

@@ -10,7 +10,7 @@ Everything on the board is saved: card status, ticks, owners, hours, notes, adde
 2. In the same project, **+ New -> Database -> PostgreSQL**.
 3. On the app service, open **Variables** and add:
    - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
-   - `DASHBOARD_PASSWORD` = a shared password (optional but recommended; without it anyone with the link can edit or reset the board)
+   - `DASHBOARD_PASSWORD` = the shared password for the login page. Without it the login is off and anyone with the link can edit or reset the board.
 4. **Settings -> Networking -> Generate Domain**.
 
 The server creates its table (`dashboard_state`) on first start. The first person to open the page seeds the board from the proposal scope.
@@ -30,4 +30,10 @@ npm start            # http://localhost:3000, saves to data/state.json
 - `PUT /api/state` merges the posted board into the saved one and returns the result
 - `GET /healthz` returns `ok` (no password)
 
-With `DASHBOARD_PASSWORD` set, the browser asks for it once (any username).
+## Login
+
+With `DASHBOARD_PASSWORD` set, every page and API call needs a sign-in at `/login`. A session lasts 30 days, and there is a **Log out** button in the header.
+
+- Changing `DASHBOARD_PASSWORD` on Railway signs everyone out. Sessions are signed with a key derived from the password.
+- After 10 wrong passwords from one IP address, that address is locked out for 15 minutes.
+- `/healthz` and `/logo.png` stay open.
